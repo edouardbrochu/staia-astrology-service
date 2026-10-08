@@ -2,7 +2,6 @@
 
 from app.application.unknown_birth_data_policy import (
     has_unknown_birth_data,
-    is_safe_unknown_variant,
     prepend_note_after_chart_system,
     synastry_caution_note,
 )
@@ -69,7 +68,6 @@ class SynastryService:
         *,
         person1_label: str | None = None,
         person2_label: str | None = None,
-        unknown_birth_data_variant: str | None = None,
     ) -> str:
         """
         Analyze synastry with LLM-optimized compact output.
@@ -83,9 +81,6 @@ class SynastryService:
         """
         synastry_data = self.analyze_synastry(person1_data, person2_data)
         text = format_synastry(synastry_data)
-        if not is_safe_unknown_variant(unknown_birth_data_variant):
-            return text
-
         affected = []
         if has_unknown_birth_data(person1_data):
             affected.append((person1_data, person1_label))

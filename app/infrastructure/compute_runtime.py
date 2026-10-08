@@ -63,7 +63,6 @@ def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: floa
                 request,
                 request.transit_date,
                 subject_label=request.subject_label,
-                unknown_birth_data_variant=request.unknown_birth_data_variant,
             )
         elif task_name == "placements":
             request = ProfileRequest.model_validate(payload)
@@ -75,7 +74,6 @@ def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: floa
                 request.person2,
                 person1_label=request.person1_label,
                 person2_label=request.person2_label,
-                unknown_birth_data_variant=request.unknown_birth_data_variant,
             )
         elif task_name == "transit_period_compact":
             request = TransitPeriodRequest.model_validate(payload)
@@ -84,7 +82,6 @@ def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: floa
                 request.start_date,
                 request.end_date,
                 subject_label=request.subject_label,
-                unknown_birth_data_variant=request.unknown_birth_data_variant,
             )
         else:
             raise ValueError(f"Unknown astrology compute task: {task_name}")

@@ -1,4 +1,4 @@
-"""Output policy for the unknown-birth-data astrology experiment."""
+"""Output policy for astrology requests with unknown birth time or location."""
 
 from __future__ import annotations
 
@@ -8,9 +8,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.domain.models import BirthData, NatalChart
 from app.domain.ports import IAstrologyProvider
-
-UNKNOWN_BIRTH_DATA_CURRENT = "current"
-UNKNOWN_BIRTH_DATA_SAFE = "safe_unknown_birth_data"
 
 CORE_NATAL_BODIES = (
     "sun",
@@ -25,11 +22,6 @@ CORE_NATAL_BODIES = (
     "pluto",
     "chiron",
 )
-
-
-def is_safe_unknown_variant(variant: str | None) -> bool:
-    """Return whether the request should receive safe unknown-birth-data behavior."""
-    return variant == UNKNOWN_BIRTH_DATA_SAFE
 
 
 def has_unknown_birth_data(birth_data: BirthData) -> bool:

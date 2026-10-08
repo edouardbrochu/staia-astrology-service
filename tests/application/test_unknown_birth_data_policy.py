@@ -64,7 +64,6 @@ def test_safe_unknown_birth_data_filters_natal_chart_to_stable_signs_and_note():
             timezone="Europe/London",
         ),
         subject_label="the user",
-        unknown_birth_data_variant="safe_unknown_birth_data",
     )
 
     assert text.splitlines() == [
@@ -91,7 +90,6 @@ def test_safe_unknown_birth_data_unknown_location_preserves_midnight_birth_time(
             birth_location_known=False,
         ),
         subject_label="the user",
-        unknown_birth_data_variant="safe_unknown_birth_data",
     )
 
     start_boundary = provider.chart_calls[0]
@@ -112,22 +110,6 @@ def test_safe_unknown_birth_data_unknown_location_preserves_midnight_birth_time(
     ) == (1990, 1, 1, 12, 15)
 
 
-def test_current_variant_keeps_existing_personal_profile_output_for_unknown_birth_data():
-    provider = FakeProvider()
-    service = ProfileService(provider=provider)
-
-    text = service.generate_personal_profile_compact(
-        BirthData(year=1990, month=1, day=1, birth_time_known=False),
-        subject_label="the user",
-        unknown_birth_data_variant="current",
-    )
-
-    assert "NOTE:" not in text
-    assert "POINTS" in text
-    assert "HOUSES" in text
-    assert "NATAL ASPECTS" in text
-
-
 def test_safe_unknown_birth_data_adds_synastry_caution_without_filtering_content():
     service = SynastryService(provider=FakeProvider())
 
@@ -136,7 +118,6 @@ def test_safe_unknown_birth_data_adds_synastry_caution_without_filtering_content
         BirthData(year=1991, month=1, day=1, birth_location_known=False),
         person1_label="the user",
         person2_label="Maya",
-        unknown_birth_data_variant="safe_unknown_birth_data",
     )
 
     assert text.startswith(
@@ -156,7 +137,6 @@ def test_safe_unknown_birth_data_adds_transit_caution_without_filtering_content(
         "2026-01-01",
         "2026-01-07",
         subject_label="the user",
-        unknown_birth_data_variant="safe_unknown_birth_data",
     )
 
     assert text.splitlines() == [
