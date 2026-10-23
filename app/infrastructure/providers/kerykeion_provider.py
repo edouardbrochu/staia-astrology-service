@@ -13,6 +13,7 @@ from app.config.astrology_presets import AstrologyConfig
 from app.config.chart_system import ChartSystemConfig
 from app.core.exceptions import ChartCalculationException, InvalidBirthDataException
 from app.core.extractors import extract_celestial_objects, filter_aspects_by_orb, filter_personal_synastry_aspects
+from app.core.nakshatra import nakshatra_label
 from app.core.temporal import normalize_transit_for_chart_timezone
 from app.domain.models import (
     BirthData,
@@ -82,6 +83,14 @@ class KerykeionProvider(IAstrologyProvider):
         self.config = config
         self.chart_factory = KerykeionChartFactory(chart_system=chart_system)
 
+    def _bodies(self, subject, names: list[str]) -> dict:
+        """Extract planets or points, tagging each with its nakshatra in sidereal charts."""
+        bodies = extract_celestial_objects(subject, names)
+        if self.chart_factory.chart_system.zodiac_type == "Sidereal":
+            for body in bodies.values():
+                body["nakshatra"] = nakshatra_label(body["abs_pos"])
+        return bodies
+
     def calculate_natal_chart(self, birth_data: BirthData) -> NatalChart:
         """
         Calculate a natal chart using Kerykeion.
@@ -104,8 +113,8 @@ class KerykeionProvider(IAstrologyProvider):
             aspects_result = AspectsFactory.single_chart_aspects(subject)
 
             # Extract data using DRY utilities
-            planets = extract_celestial_objects(subject, self.config.planets)
-            points = extract_celestial_objects(subject, self.config.points)
+            planets = self._bodies(subject, self.config.planets)
+            points = self._bodies(subject, self.config.points)
             houses = extract_celestial_objects(subject, self.config.houses)
             aspects = filter_aspects_by_orb(aspects_result, self.config.natal_orb)
 
@@ -235,8 +244,8 @@ class KerykeionProvider(IAstrologyProvider):
             )
 
             # Extract transit planets
-            transit_planets = extract_celestial_objects(transit_subject, self.config.planets)
-            transit_points = extract_celestial_objects(transit_subject, self.config.points)
+            transit_planets = self._bodies(transit_subject, self.config.planets)
+            transit_points = self._bodies(transit_subject, self.config.points)
 
             # Calculate transit-to-natal aspects
             natal_subject = natal_chart.provider_data

@@ -1,9 +1,11 @@
 """Regression tests for astrology preset configuration."""
 
 from app.config.astrology_presets import DetailLevel, get_preset
-from app.config.chart_system import DEFAULT_CHART_SYSTEM
+from app.config.chart_system import HouseSystem, Zodiac, chart_system_config
 from app.domain.models import BirthData
 from app.infrastructure.providers.kerykeion_provider import KerykeionProvider
+
+DEFAULT_CHART_SYSTEM = chart_system_config(Zodiac.WESTERN, HouseSystem.PLACIDUS)
 
 
 def test_core_preset_includes_nodes_and_chiron():

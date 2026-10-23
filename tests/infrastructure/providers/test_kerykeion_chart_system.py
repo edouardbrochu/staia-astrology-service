@@ -6,10 +6,12 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app.config.astrology_presets import DetailLevel, get_preset
-from app.config.chart_system import DEFAULT_CHART_SYSTEM
+from app.config.chart_system import HouseSystem, Zodiac, chart_system_config
 from app.domain.models import BirthData
 from app.infrastructure.providers.kerykeion_chart_factory import KerykeionChartFactory
 from app.infrastructure.providers.kerykeion_provider import KerykeionProvider
+
+DEFAULT_CHART_SYSTEM = chart_system_config(Zodiac.WESTERN, HouseSystem.PLACIDUS)
 
 
 def _birth_data() -> BirthData:
@@ -147,3 +149,49 @@ def test_ephemeris_factory_disables_dst_inference():
         )
 
     assert create_ephemeris.call_args.kwargs["is_dst"] is False
+
+
+def test_vedic_whole_sign_chart_is_sidereal_lahiri_with_nakshatras():
+    provider = KerykeionProvider(
+        config=get_preset(DetailLevel.CORE),
+        chart_system=chart_system_config(Zodiac.VEDIC, HouseSystem.WHOLE_SIGN),
+    )
+
+    natal_chart = provider.calculate_natal_chart(_birth_data())
+    subject = natal_chart.provider_data
+
+    assert natal_chart.chart_system["id"] == "vedic_sidereal_lahiri_whole_sign"
+    assert subject.zodiac_type == "Sidereal"
+    assert subject.sidereal_mode == "LAHIRI"
+    assert subject.houses_system_identifier == "W"
+    # Tropical Sun is Gemini 24°; Lahiri moves it back about 24° into Gemini 0°.
+    assert natal_chart.planets["sun"]["sign"] == "Gem"
+    assert natal_chart.planets["sun"]["position"] == pytest.approx(0.2, abs=0.5)
+    assert natal_chart.planets["sun"]["nakshatra"] == "Mrigashira 3"
+    assert natal_chart.points["ascendant"]["nakshatra"]
+    assert natal_chart.houses["first_house"]["position"] == 0
+    assert natal_chart.houses["first_house"]["sign"] == natal_chart.points["ascendant"]["sign"]
+
+
+@pytest.mark.parametrize(
+    ("house_system", "chart_system_id", "identifier"),
+    [
+        (HouseSystem.WHOLE_SIGN, "western_tropical_whole_sign", "W"),
+        (HouseSystem.EQUAL, "western_tropical_equal", "A"),
+    ],
+)
+def test_western_house_system_choices(house_system, chart_system_id, identifier):
+    provider = KerykeionProvider(
+        config=get_preset(DetailLevel.CORE),
+        chart_system=chart_system_config(Zodiac.WESTERN, house_system),
+    )
+
+    natal_chart = provider.calculate_natal_chart(_birth_data())
+
+    assert natal_chart.chart_system["id"] == chart_system_id
+    assert natal_chart.provider_data.houses_system_identifier == identifier
+    assert natal_chart.planets["sun"]["sign"] == "Gem"
+    assert "nakshatra" not in natal_chart.planets["sun"]
+    ascendant = natal_chart.points["ascendant"]["abs_pos"]
+    expected_first_cusp = ascendant if house_system == HouseSystem.EQUAL else ascendant - ascendant % 30
+    assert natal_chart.houses["first_house"]["abs_pos"] == pytest.approx(expected_first_cusp, abs=0.01)

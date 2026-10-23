@@ -4,7 +4,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.config.chart_system import HouseSystem, Zodiac
 from app.domain.models.birth_data import BirthData
+
+
+class ChartSystemRequest(BaseModel):
+    """The user's chosen zodiac and house system."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    zodiac: Zodiac
+    house_system: HouseSystem
 
 
 class ProfileRequest(BirthData):
@@ -26,7 +36,8 @@ class ProfileRequest(BirthData):
                 "latitude": 40.7128,
                 "longitude": -74.0060,
                 "timezone": "America/New_York",
-                "transit_date": "2025-10-30T12:00:00Z"
+                "transit_date": "2025-10-30T12:00:00Z",
+                "chart_system": {"zodiac": "western", "house_system": "placidus"}
             }
         }
     )
@@ -40,6 +51,7 @@ class ProfileRequest(BirthData):
         None,
         description="LLM-facing subject label for precision notes",
     )
+    chart_system: ChartSystemRequest = Field(..., description="Zodiac and house system to calculate with")
 
 
 class TransitPeriodRequest(BirthData):
@@ -62,7 +74,8 @@ class TransitPeriodRequest(BirthData):
                 "longitude": -74.0060,
                 "timezone": "America/New_York",
                 "start_date": "2026-01-01",
-                "end_date": "2026-12-31"
+                "end_date": "2026-12-31",
+                "chart_system": {"zodiac": "western", "house_system": "placidus"}
             }
         }
     )
@@ -81,6 +94,7 @@ class TransitPeriodRequest(BirthData):
         None,
         description="LLM-facing subject label for precision notes",
     )
+    chart_system: ChartSystemRequest = Field(..., description="Zodiac and house system to calculate with")
 
 
 class SynastryRequest(BaseModel):
@@ -109,7 +123,8 @@ class SynastryRequest(BaseModel):
                     "latitude": 34.0522,
                     "longitude": -118.2437,
                     "timezone": "America/Los_Angeles"
-                }
+                },
+                "chart_system": {"zodiac": "western", "house_system": "placidus"}
             }
         }
     )
@@ -124,3 +139,4 @@ class SynastryRequest(BaseModel):
         None,
         description="LLM-facing label for second person precision notes",
     )
+    chart_system: ChartSystemRequest = Field(..., description="Zodiac and house system to calculate with")

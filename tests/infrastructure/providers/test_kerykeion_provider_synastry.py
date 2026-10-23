@@ -3,9 +3,11 @@
 import pytest
 
 from app.config.astrology_presets import DetailLevel, get_preset
-from app.config.chart_system import DEFAULT_CHART_SYSTEM
+from app.config.chart_system import HouseSystem, Zodiac, chart_system_config
 from app.domain.models import BirthData
 from app.infrastructure.providers.kerykeion_provider import KerykeionProvider
+
+DEFAULT_CHART_SYSTEM = chart_system_config(Zodiac.WESTERN, HouseSystem.PLACIDUS)
 
 
 class TestKerykeionProviderSynastryScore:

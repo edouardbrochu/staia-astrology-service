@@ -1,21 +1,42 @@
-"""Canonical chart-system configuration for the astrology service."""
+"""Chart-system configuration for the astrology service."""
 
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Literal
 
 
-class ChartSystemId(StrEnum):
-    """Supported chart-system identifiers."""
+class Zodiac(StrEnum):
+    """User-selectable zodiac."""
 
-    WESTERN_TROPICAL_PLACIDUS = "western_tropical_placidus"
+    WESTERN = "western"
+    VEDIC = "vedic"
+
+
+class HouseSystem(StrEnum):
+    """User-selectable house system."""
+
+    PLACIDUS = "placidus"
+    WHOLE_SIGN = "whole_sign"
+    EQUAL = "equal"
+
+
+ZODIAC_PREFIXES = {
+    Zodiac.WESTERN: "western_tropical",
+    Zodiac.VEDIC: "vedic_sidereal_lahiri",
+}
+
+HOUSE_SYSTEMS = {
+    HouseSystem.PLACIDUS: ("Placidus", "P"),
+    HouseSystem.WHOLE_SIGN: ("Whole Sign", "W"),
+    HouseSystem.EQUAL: ("Equal", "A"),
+}
 
 
 @dataclass(frozen=True)
 class ChartSystemConfig:
-    """Boot-time chart-system settings applied to every astrology calculation."""
+    """Settings applied to every calculation in one request."""
 
-    id: ChartSystemId
+    id: str
     zodiac_type: Literal["Tropical", "Sidereal"]
     house_system: str
     house_system_identifier: str
@@ -33,12 +54,16 @@ class ChartSystemConfig:
         return asdict(self)
 
 
-DEFAULT_CHART_SYSTEM = ChartSystemConfig(
-    id=ChartSystemId.WESTERN_TROPICAL_PLACIDUS,
-    zodiac_type="Tropical",
-    house_system="Placidus",
-    house_system_identifier="P",
-    perspective_type="Apparent Geocentric",
-    provider="kerykeion",
-    sidereal_mode=None,
-)
+def chart_system_config(zodiac: Zodiac, house_system: HouseSystem) -> ChartSystemConfig:
+    """Build the calculation settings for a user's zodiac and house system."""
+    house_label, house_identifier = HOUSE_SYSTEMS[house_system]
+    is_vedic = zodiac == Zodiac.VEDIC
+    return ChartSystemConfig(
+        id=f"{ZODIAC_PREFIXES[zodiac]}_{house_system.value}",
+        zodiac_type="Sidereal" if is_vedic else "Tropical",
+        house_system=house_label,
+        house_system_identifier=house_identifier,
+        perspective_type="Apparent Geocentric",
+        provider="kerykeion",
+        sidereal_mode="LAHIRI" if is_vedic else None,
+    )

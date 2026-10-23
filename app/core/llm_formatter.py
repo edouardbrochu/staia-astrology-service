@@ -10,7 +10,7 @@ import math
 from typing import Any
 
 # Essential fields to keep when simplifying data
-ESSENTIAL_PLANET_FIELDS = {"name", "sign", "position", "house", "retrograde"}
+ESSENTIAL_PLANET_FIELDS = {"name", "sign", "position", "house", "nakshatra", "retrograde"}
 ESSENTIAL_ASPECT_FIELDS = {"p1_name", "p2_name", "aspect", "orbit"}
 MAJOR_ASPECTS = {"conjunction", "opposition", "square", "trine", "sextile"}
 
@@ -157,10 +157,11 @@ def format_planet(planet: dict[str, Any]) -> str:
     """Format a single planet as word-based compact text.
 
     Args:
-        planet: Planet dictionary with name, sign, position, house, retrograde
+        planet: Planet dictionary with name, sign, position, house, optional nakshatra, retrograde
 
     Returns:
-        Formatted string like "Sun in Aries 15 deg (H1)" or "Mercury in Pisces 8 deg (H12, Rx)"
+        Formatted string like "Sun in Aries 15 deg (H1)", "Mercury in Pisces 8 deg (H12, Rx)",
+        or, in sidereal charts, "Moon in Libra 14 deg (H4, Swati 3)"
     """
     name = _format_body_name(planet.get("name", "Unknown"))
     sign = planet.get("sign", "Unknown")
@@ -176,6 +177,8 @@ def format_planet(planet: dict[str, Any]) -> str:
     house_str = _normalize_house(house)
     if house_str:
         suffixes.append(house_str)
+    if planet.get("nakshatra"):
+        suffixes.append(planet["nakshatra"])
     if retrograde:
         suffixes.append("Rx")
 

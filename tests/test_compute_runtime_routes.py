@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.config.settings import Settings
+from app.infrastructure.compute_runtime import _run_compute_task
 from app.main import app, create_app
 
 BASE_BIRTH_DATA = {
@@ -18,7 +19,11 @@ BASE_BIRTH_DATA = {
     "timezone": "Europe/London",
 }
 
+CHART_SYSTEM = {"zodiac": "western", "house_system": "placidus"}
+PROFILE_PAYLOAD = {**BASE_BIRTH_DATA, "chart_system": CHART_SYSTEM}
+
 SYNASTRY_PAYLOAD = {
+    "chart_system": CHART_SYSTEM,
     "person1": BASE_BIRTH_DATA,
     "person2": {
         "year": 1992,
@@ -33,7 +38,7 @@ SYNASTRY_PAYLOAD = {
 }
 
 TRANSIT_PERIOD_PAYLOAD = {
-    **BASE_BIRTH_DATA,
+    **PROFILE_PAYLOAD,
     "start_date": "2026-01-01",
     "end_date": "2026-01-31",
 }
@@ -90,9 +95,9 @@ def test_cpu_bound_routes_use_shared_compute_runtime(monkeypatch):
     auth_headers = {"X-Astrology-Service-Token": "internal-token"}
 
     routes = [
-        ("/api/v1/astrology/profile", BASE_BIRTH_DATA, "profile_compact"),
-        ("/api/v1/astrology/profile/lookup", BASE_BIRTH_DATA, "lookup_profile_compact"),
-        ("/api/v1/astrology/profile/placements", BASE_BIRTH_DATA, "placements"),
+        ("/api/v1/astrology/profile", PROFILE_PAYLOAD, "profile_compact"),
+        ("/api/v1/astrology/profile/lookup", PROFILE_PAYLOAD, "lookup_profile_compact"),
+        ("/api/v1/astrology/profile/placements", PROFILE_PAYLOAD, "placements"),
         ("/api/v1/astrology/synastry", SYNASTRY_PAYLOAD, "synastry_compact"),
         ("/api/v1/astrology/transits/period", TRANSIT_PERIOD_PAYLOAD, "transit_period_compact"),
     ]
@@ -119,3 +124,18 @@ def test_lifespan_sets_astrology_service_role(monkeypatch):
         assert app.state.service_role == "astrology-service"
 
     assert fake_runtime.shutdown_called is True
+
+
+def test_compute_task_uses_requested_chart_system():
+    payload = {
+        **BASE_BIRTH_DATA,
+        "transit_date": "2026-10-20T12:00:00Z",
+        "chart_system": {"zodiac": "vedic", "house_system": "whole_sign"},
+    }
+
+    outcome = _run_compute_task("lookup_profile_compact", payload, enqueued_at=0)
+
+    assert outcome["ok"], outcome
+    lines = outcome["result"].splitlines()
+    assert lines[0] == "CHART_SYSTEM: vedic_sidereal_lahiri_whole_sign"
+    assert "Sun in Gem 0° (H10, Mrigashira 3)" in lines

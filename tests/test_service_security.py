@@ -16,6 +16,7 @@ BASE_BIRTH_DATA = {
     "latitude": 51.5,
     "longitude": -0.1,
     "timezone": "Europe/London",
+    "chart_system": {"zodiac": "western", "house_system": "placidus"},
 }
 
 

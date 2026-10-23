@@ -7,69 +7,65 @@ import logging
 import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor
-from time import monotonic
 from typing import Any
 
-import sentry_sdk
 from fastapi import Request
 
 from app.application.compatibility_service import SynastryService
 from app.application.profile_service import ProfileService
 from app.application.transit_period_service import TransitPeriodService
 from app.config.astrology_presets import DetailLevel, get_preset
-from app.config.chart_system import DEFAULT_CHART_SYSTEM
+from app.config.chart_system import HouseSystem, Zodiac, chart_system_config
 from app.config.constants import (
     ASTROLOGY_COMPUTE_QUEUE_WARNING_MS,
     ASTROLOGY_COMPUTE_TOTAL_WARNING_MS,
-    ASTROLOGY_COMPUTE_WARNING_COOLDOWN_SECONDS,
 )
 from app.config.settings import Settings, settings
 from app.core.exceptions import ChartCalculationException, InvalidBirthDataException
 from app.infrastructure.providers.kerykeion_provider import KerykeionProvider
-from app.models.requests import ProfileRequest, SynastryRequest, TransitPeriodRequest
+from app.models.requests import ChartSystemRequest, ProfileRequest, SynastryRequest, TransitPeriodRequest
 
 logger = logging.getLogger(__name__)
 
-_WORKER_SERVICES: dict[str, Any] | None = None
+_WORKER_SERVICES: dict[tuple[Zodiac, HouseSystem], dict[str, Any]] = {}
 
 
-def _get_worker_services() -> dict[str, Any]:
-    """Lazily initialize astrology services once per executor worker process."""
-    global _WORKER_SERVICES
-    if _WORKER_SERVICES is None:
+def _get_worker_services(chart_system: ChartSystemRequest) -> dict[str, Any]:
+    """Lazily initialize astrology services once per chart system and executor worker process."""
+    key = (chart_system.zodiac, chart_system.house_system)
+    if key not in _WORKER_SERVICES:
         provider = KerykeionProvider(
             config=get_preset(DetailLevel.CORE),
-            chart_system=DEFAULT_CHART_SYSTEM,
+            chart_system=chart_system_config(chart_system.zodiac, chart_system.house_system),
         )
-        _WORKER_SERVICES = {
+        _WORKER_SERVICES[key] = {
             "profile": ProfileService(provider=provider),
             "synastry": SynastryService(provider=provider),
             "transit_period": TransitPeriodService(provider=provider),
         }
-    return _WORKER_SERVICES
+    return _WORKER_SERVICES[key]
 
 
 def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: float) -> dict[str, Any]:
     """Execute a serializable astrology task inside the shared worker pool."""
     started_at = time.time()
     try:
-        services = _get_worker_services()
         if task_name == "profile_compact":
             request = ProfileRequest.model_validate(payload)
-            result = services["profile"].generate_profile_compact(request, request.transit_date)
+            result = _get_worker_services(request.chart_system)["profile"].generate_profile_compact(request, request.transit_date)
         elif task_name == "lookup_profile_compact":
             request = ProfileRequest.model_validate(payload)
-            result = services["profile"].generate_personal_profile_compact(
+            result = _get_worker_services(request.chart_system)["profile"].generate_personal_profile_compact(
                 request,
                 request.transit_date,
                 subject_label=request.subject_label,
             )
         elif task_name == "placements":
             request = ProfileRequest.model_validate(payload)
-            result = services["profile"].generate_placements(request).model_dump(mode="json")
+            result = _get_worker_services(request.chart_system)["profile"].generate_placements(request).model_dump(mode="json")
         elif task_name == "synastry_compact":
             request = SynastryRequest.model_validate(payload)
-            result = services["synastry"].analyze_synastry_compact(
+            result = _get_worker_services(request.chart_system)["synastry"].analyze_synastry_compact(
                 request.person1,
                 request.person2,
                 person1_label=request.person1_label,
@@ -77,7 +73,7 @@ def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: floa
             )
         elif task_name == "transit_period_compact":
             request = TransitPeriodRequest.model_validate(payload)
-            result = services["transit_period"].generate_transit_period_compact(
+            result = _get_worker_services(request.chart_system)["transit_period"].generate_transit_period_compact(
                 request,
                 request.start_date,
                 request.end_date,
@@ -113,7 +109,6 @@ class AstrologyComputeRuntime:
             max_workers=max_workers,
             mp_context=multiprocessing.get_context("spawn"),
         )
-        self._last_warning_ts: dict[tuple[str, str], float] = {}
 
     async def run(self, task_name: str, payload: dict[str, Any], route_name: str) -> Any:
         """Execute a task and log queue, execution, and total duration."""
@@ -186,21 +181,14 @@ class AstrologyComputeRuntime:
     ) -> None:
         if queue_wait_ms < ASTROLOGY_COMPUTE_QUEUE_WARNING_MS:
             return
-        if not self._warning_allowed("queue_pressure", task_name):
-            return
-
-        message = (
-            "Astrology compute queue pressure detected "
-            f"(task={task_name}, route={route_name}, queue_wait_ms={queue_wait_ms:.1f})"
-        )
-        self._capture_warning(
-            message=message,
-            error_type="astrology_compute_queue_pressure",
-            route_name=route_name,
-            task_name=task_name,
-            queue_wait_ms=queue_wait_ms,
-            execution_ms=execution_ms,
-            total_ms=total_ms,
+        logger.warning(
+            "Astrology compute queue pressure route=%s task=%s queue_wait_ms=%.1f execution_ms=%.1f total_ms=%.1f compute_pool_size=%s",
+            route_name,
+            task_name,
+            queue_wait_ms,
+            execution_ms,
+            total_ms,
+            self.max_workers,
         )
 
     def _report_slow_task(
@@ -214,65 +202,15 @@ class AstrologyComputeRuntime:
     ) -> None:
         if total_ms < ASTROLOGY_COMPUTE_TOTAL_WARNING_MS:
             return
-        if not self._warning_allowed("slow_task", task_name):
-            return
-
-        message = (
-            "Astrology compute slow task detected "
-            f"(task={task_name}, route={route_name}, total_ms={total_ms:.1f})"
+        logger.warning(
+            "Astrology compute slow task route=%s task=%s queue_wait_ms=%.1f execution_ms=%.1f total_ms=%.1f compute_pool_size=%s",
+            route_name,
+            task_name,
+            queue_wait_ms,
+            execution_ms,
+            total_ms,
+            self.max_workers,
         )
-        self._capture_warning(
-            message=message,
-            error_type="astrology_compute_slow_task",
-            route_name=route_name,
-            task_name=task_name,
-            queue_wait_ms=queue_wait_ms,
-            execution_ms=execution_ms,
-            total_ms=total_ms,
-        )
-
-    def _warning_allowed(self, warning_type: str, task_name: str) -> bool:
-        key = (warning_type, task_name)
-        now = monotonic()
-        last_sent = self._last_warning_ts.get(key)
-        if (
-            last_sent is not None
-            and now - last_sent < ASTROLOGY_COMPUTE_WARNING_COOLDOWN_SECONDS
-        ):
-            return False
-        self._last_warning_ts[key] = now
-        return True
-
-    def _capture_warning(
-        self,
-        *,
-        message: str,
-        error_type: str,
-        route_name: str,
-        task_name: str,
-        queue_wait_ms: float,
-        execution_ms: float,
-        total_ms: float,
-    ) -> None:
-        try:
-            with sentry_sdk.new_scope() as scope:
-                scope.set_tag("error_type", error_type)
-                scope.set_tag("service_role", "astrology-service")
-                scope.set_tag("astrology_task", task_name)
-                scope.set_context(
-                    "astrology_compute_runtime",
-                    {
-                        "route": route_name,
-                        "task": task_name,
-                        "queue_wait_ms": queue_wait_ms,
-                        "execution_ms": execution_ms,
-                        "total_ms": total_ms,
-                        "compute_pool_size": self.max_workers,
-                    },
-                )
-                sentry_sdk.capture_message(message, level="warning")
-        except Exception as error:
-            logger.debug("Failed to report astrology compute warning to Sentry: %s", error)
 
     def shutdown(self) -> None:
         """Shut down the shared worker pool."""
