@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 from kerykeion import AstrologicalSubjectFactory, EphemerisDataFactory
 from kerykeion.schemas.kr_models import AstrologicalSubjectModel
-from pytz import AmbiguousTimeError, NonExistentTimeError, UnknownTimeZoneError
+from pytz import UnknownTimeZoneError
 
 from app.config.chart_system import ChartSystemConfig
 from app.domain.models import BirthData
@@ -23,16 +23,7 @@ class KerykeionChartFactory:
 
     def create_subject(self, name: str, birth_data: BirthData) -> AstrologicalSubjectModel:
         """Create a natal subject with the canonical chart-system settings."""
-        _validate_local_datetime_exists(
-            birth_data.timezone,
-            datetime(
-                birth_data.year,
-                birth_data.month,
-                birth_data.day,
-                birth_data.hour or 0,
-                birth_data.minute or 0,
-            ),
-        )
+        _validate_timezone(birth_data.timezone)
         subject = AstrologicalSubjectFactory.from_birth_data(
             name=name,
             year=birth_data.year,
@@ -62,8 +53,7 @@ class KerykeionChartFactory:
         max_days: int,
     ) -> EphemerisDataFactory:
         """Create ephemeris data with the canonical chart-system settings."""
-        _validate_local_datetime_exists(location.timezone, start_datetime)
-        _validate_local_datetime_exists(location.timezone, end_datetime)
+        _validate_timezone(location.timezone)
         return EphemerisDataFactory(
             start_datetime=start_datetime,
             end_datetime=end_datetime,
@@ -101,20 +91,14 @@ class KerykeionChartFactory:
             )
 
 
-def _validate_local_datetime_exists(timezone_name: str | None, local_datetime: datetime) -> None:
-    """Reject spring-forward gap times before forcing Kerykeion to use standard time."""
+def _validate_timezone(timezone_name: str | None) -> None:
+    """Reject unknown timezones as invalid birth data.
+
+    Kerykeion localizes with ``is_dst=False``, so a spring-forward gap time
+    resolves to the offset before the gap (00:30 in a 00:00-to-01:00 gap is
+    charted as 01:30 on the new clock) and a fall-back time uses standard time.
+    """
     try:
-        timezone = pytz.timezone(timezone_name or "Europe/London")
+        pytz.timezone(timezone_name or "Europe/London")
     except UnknownTimeZoneError as error:
         raise ValueError(f"Unknown timezone {timezone_name!r}") from error
-
-    naive_datetime = local_datetime
-    if local_datetime.tzinfo is not None:
-        naive_datetime = local_datetime.astimezone(timezone).replace(tzinfo=None)
-
-    try:
-        timezone.localize(naive_datetime, is_dst=None)
-    except AmbiguousTimeError:
-        return
-    except NonExistentTimeError as error:
-        raise ValueError(f"Nonexistent local time {naive_datetime.isoformat()} in {timezone.zone}") from error

@@ -77,30 +77,29 @@ def test_subject_factory_disables_dst_inference():
     assert create_subject.call_args.kwargs["is_dst"] is False
 
 
-def test_subject_factory_rejects_nonexistent_local_time_before_disabling_dst():
+def test_subject_factory_charts_spring_forward_gap_time_as_the_hour_after():
     factory = KerykeionChartFactory(chart_system=DEFAULT_CHART_SYSTEM)
 
-    with (
-        patch(
-            "app.infrastructure.providers.kerykeion_chart_factory.AstrologicalSubjectFactory.from_birth_data"
-        ) as create_subject,
-        pytest.raises(ValueError, match="Nonexistent local time"),
-    ):
-        factory.create_subject(
+    def jerusalem_subject(hour: int):
+        # Israel moved clocks from 00:00 to 01:00 on 1993-04-02, so 00:00 never existed.
+        return factory.create_subject(
             name="Subject",
             birth_data=BirthData(
-                year=2024,
-                month=3,
-                day=10,
-                hour=2,
-                minute=30,
-                latitude=40.7128,
-                longitude=-74.0060,
-                timezone="America/New_York",
+                year=1993,
+                month=4,
+                day=2,
+                hour=hour,
+                minute=0,
+                latitude=31.7683,
+                longitude=35.2137,
+                timezone="Asia/Jerusalem",
             ),
         )
 
-    create_subject.assert_not_called()
+    gap_subject = jerusalem_subject(0)
+
+    assert gap_subject.iso_formatted_utc_datetime == "1993-04-01T22:00:00+00:00"
+    assert gap_subject.iso_formatted_utc_datetime == jerusalem_subject(1).iso_formatted_utc_datetime
 
 
 def test_subject_factory_uses_standard_time_for_ambiguous_local_time():
