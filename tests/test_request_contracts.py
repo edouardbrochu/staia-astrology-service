@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models.requests import ProfileRequest, SynastryRequest, TransitPeriodRequest
+from app.models.requests import ProfileRequest, RelationshipRequest, TransitPeriodRequest
 
 
 @pytest.mark.parametrize(
@@ -27,7 +27,7 @@ from app.models.requests import ProfileRequest, SynastryRequest, TransitPeriodRe
             },
         ),
         (
-            SynastryRequest,
+            RelationshipRequest,
             {
                 "person1": {"year": 1990, "month": 1, "day": 1},
                 "person2": {"year": 1991, "month": 2, "day": 2},

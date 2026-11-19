@@ -17,6 +17,7 @@ configured through `ASTROLOGY_SERVICE_TOKEN`.
 - `POST /api/v1/astrology/profile/monthly`
 - `POST /api/v1/astrology/profile/placements`
 - `POST /api/v1/astrology/synastry`
+- `POST /api/v1/astrology/composite`
 - `POST /api/v1/astrology/transits/period`
 - `GET /health`
 

@@ -97,8 +97,8 @@ class TransitPeriodRequest(BirthData):
     chart_system: ChartSystemRequest = Field(..., description="Zodiac and house system to calculate with")
 
 
-class SynastryRequest(BaseModel):
-    """Request model for synastry analysis (relationship compatibility)."""
+class RelationshipRequest(BaseModel):
+    """Request model for two-person relationship calculations (synastry and composite)."""
 
     model_config = ConfigDict(
         extra="forbid",

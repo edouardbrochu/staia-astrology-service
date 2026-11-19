@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 
 from kerykeion import (
     AspectsFactory,
+    CompositeSubjectFactory,
     RelationshipScoreFactory,
     TransitsTimeRangeFactory,
 )
@@ -17,6 +18,7 @@ from app.core.nakshatra import nakshatra_label
 from app.core.temporal import normalize_transit_for_chart_timezone
 from app.domain.models import (
     BirthData,
+    CompositeChart,
     NatalChart,
     RelationshipScore,
     Synastry,
@@ -203,6 +205,37 @@ class KerykeionProvider(IAstrologyProvider):
 
         except Exception as e:
             raise ChartCalculationException(f"Failed to calculate synastry: {str(e)}")
+
+    def calculate_composite(self, chart1: NatalChart, chart2: NatalChart) -> CompositeChart:
+        """
+        Calculate the midpoint composite chart using Kerykeion.
+
+        Each planet, point, and house cusp is the midpoint of the two natal
+        positions; aspects are calculated within the composite chart.
+
+        Raises:
+            ChartCalculationException: If composite calculation fails
+        """
+        try:
+            subject1 = chart1.provider_data
+            subject2 = chart2.provider_data
+
+            if not subject1 or not subject2:
+                raise ChartCalculationException("Charts missing provider data for composite calculation")
+
+            composite = CompositeSubjectFactory(subject1, subject2).get_midpoint_composite_subject_model()
+            aspects_result = AspectsFactory.single_chart_aspects(composite)
+
+            return CompositeChart(
+                chart_system=self.chart_factory.metadata(),
+                planets=self._bodies(composite, self.config.planets),
+                points=self._bodies(composite, self.config.points),
+                houses=extract_celestial_objects(composite, self.config.houses),
+                aspects=filter_aspects_by_orb(aspects_result, self.config.natal_orb),
+            )
+
+        except Exception as e:
+            raise ChartCalculationException(f"Failed to calculate composite: {str(e)}")
 
     def calculate_transits(
         self,

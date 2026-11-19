@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.domain.models import BirthData, NatalChart
+from app.domain.models import BirthData
 from app.domain.ports import IAstrologyProvider
 
 CORE_NATAL_BODIES = (
@@ -47,6 +47,18 @@ def synastry_caution_note(affected: list[tuple[BirthData, str | None]]) -> str:
     return f"NOTE: {'; '.join(subjects)}; some time-sensitive synastry may be less precise."
 
 
+def composite_omitted_note(affected: list[tuple[BirthData, str | None]]) -> str:
+    """Build the filtered-output note for composite partial mode."""
+    subjects = [
+        f"{_unknown_phrase(birth_data)} for {_clean_label(label, fallback)} is unknown"
+        for birth_data, label, fallback in _with_fallbacks(affected)
+    ]
+    return (
+        f"NOTE: {'; '.join(subjects)}; ascendant, houses, house placements, points, "
+        "exact degrees, and aspects were omitted."
+    )
+
+
 def transit_caution_note(birth_data: BirthData, label: str | None) -> str:
     """Build the transit-period caution note."""
     return (
@@ -82,21 +94,60 @@ def format_safe_partial_natal_chart(
     return "\n".join(lines).strip()
 
 
-def _stable_natal_chart(provider: IAstrologyProvider, birth_data: BirthData) -> dict[str, Any]:
-    start_birth_data, end_birth_data = _uncertainty_boundary_birth_data(birth_data)
-    start_chart = provider.calculate_natal_chart(start_birth_data)
-    end_chart = provider.calculate_natal_chart(end_birth_data)
+def format_safe_partial_composite_chart(
+    *,
+    provider: IAstrologyProvider,
+    person1_data: BirthData,
+    person2_data: BirthData,
+    affected: list[tuple[BirthData, str | None]],
+) -> str:
+    """Format a heavily filtered composite chart for unknown birth time/location."""
+    person1_charts = _possible_natal_charts(provider, person1_data)
+    person2_charts = _possible_natal_charts(provider, person2_data)
+    composites = [
+        provider.calculate_composite(chart1, chart2)
+        for chart1 in person1_charts
+        for chart2 in person2_charts
+    ]
+    lines = _chart_system_lines(composites[0].chart_system)
+    lines.append(composite_omitted_note(affected))
 
+    stable_planets = _stable_planet_lines([composite.planets for composite in composites])
+    if stable_planets:
+        lines.extend(["", "COMPOSITE CHART", "", "PLANETS", *stable_planets])
+    return "\n".join(lines).strip()
+
+
+def _stable_natal_chart(provider: IAstrologyProvider, birth_data: BirthData) -> dict[str, Any]:
+    start_chart, end_chart = _possible_natal_charts(provider, birth_data)
+    return {
+        "chart_system": start_chart.chart_system,
+        "planets": _stable_planet_lines([start_chart.planets, end_chart.planets]),
+    }
+
+
+def _possible_natal_charts(provider: IAstrologyProvider, birth_data: BirthData) -> list[Any]:
+    """Charts at both ends of the possible birth window, or the one chart when birth data is known."""
+    if not has_unknown_birth_data(birth_data):
+        return [provider.calculate_natal_chart(birth_data)]
+    start_birth_data, end_birth_data = _uncertainty_boundary_birth_data(birth_data)
+    return [
+        provider.calculate_natal_chart(start_birth_data),
+        provider.calculate_natal_chart(end_birth_data),
+    ]
+
+
+def _stable_planet_lines(planet_sets: list[dict[str, Any]]) -> list[str]:
+    """List core planets whose sign is the same in every possible chart."""
     lines: list[str] = []
     for body in CORE_NATAL_BODIES:
-        start_body = _body_data(start_chart, body)
-        end_body = _body_data(end_chart, body)
-        if not start_body or not end_body:
+        bodies = [_body_data(planets, body) for planets in planet_sets]
+        if not all(bodies):
             continue
-        start_sign = start_body.get("sign")
-        if start_sign and start_sign == end_body.get("sign"):
-            lines.append(f"{_display_name(start_body, body)} in {start_sign}")
-    return {"chart_system": start_chart.chart_system, "planets": lines}
+        signs = {body_data.get("sign") for body_data in bodies}
+        if len(signs) == 1 and None not in signs:
+            lines.append(f"{_display_name(bodies[0], body)} in {signs.pop()}")
+    return lines
 
 
 def _uncertainty_boundary_birth_data(birth_data: BirthData) -> tuple[BirthData, BirthData]:
@@ -147,8 +198,8 @@ def _birth_data_at_utc(template: BirthData, instant: datetime) -> BirthData:
     )
 
 
-def _body_data(chart: NatalChart, body: str) -> dict[str, Any] | None:
-    body_data = chart.planets.get(body)
+def _body_data(planets: dict[str, Any], body: str) -> dict[str, Any] | None:
+    body_data = planets.get(body)
     return body_data if isinstance(body_data, dict) else None
 
 

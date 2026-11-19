@@ -275,11 +275,19 @@ def _format_natal_sections(chart_data: dict[str, Any]) -> list[str]:
     Returns:
         List of formatted lines (with trailing blank lines per section)
     """
+    return _format_chart_sections(
+        chart_data.get("natal_chart", {}),
+        chart_data.get("aspects", {}).get("natal", []),
+        aspects_title="NATAL ASPECTS",
+    )
+
+
+def _format_chart_sections(chart: dict[str, Any], chart_aspects: list[dict], *, aspects_title: str) -> list[str]:
+    """Format planets, points, houses, and aspects of one chart."""
     lines = []
-    natal_chart = chart_data.get("natal_chart", {})
 
     # Planets
-    planets = natal_chart.get("planets", {})
+    planets = chart.get("planets", {})
     if planets:
         lines.append("PLANETS")
         for planet_key, planet_data in planets.items():
@@ -288,7 +296,7 @@ def _format_natal_sections(chart_data: dict[str, Any]) -> list[str]:
         lines.append("")
 
     # Points (Ascendant, MC, etc.)
-    points = natal_chart.get("points", {})
+    points = chart.get("points", {})
     if points:
         lines.append("POINTS")
         for point_key, point_data in points.items():
@@ -297,7 +305,7 @@ def _format_natal_sections(chart_data: dict[str, Any]) -> list[str]:
         lines.append("")
 
     # Houses
-    houses = natal_chart.get("houses", {})
+    houses = chart.get("houses", {})
     if houses:
         lines.append("HOUSES")
         for house_key, house_data in houses.items():
@@ -307,13 +315,11 @@ def _format_natal_sections(chart_data: dict[str, Any]) -> list[str]:
                 lines.append(f"{name}: {sign}")
         lines.append("")
 
-    # Natal aspects
-    aspects = chart_data.get("aspects", {})
-    natal_aspects = aspects.get("natal", [])
-    if natal_aspects:
-        filtered = filter_aspects(natal_aspects)
+    # Aspects
+    if chart_aspects:
+        filtered = filter_aspects(chart_aspects)
         if filtered:
-            lines.append("NATAL ASPECTS")
+            lines.append(aspects_title)
             for aspect in filtered:
                 lines.append(format_aspect(aspect))
             lines.append("")
@@ -574,3 +580,24 @@ def format_synastry(synastry_data: dict[str, Any]) -> str:
         lines.append(format_aspect(aspect, prefix1="Person1 ", prefix2="Person2 "))
 
     return "\n".join(lines)
+
+
+def format_composite_chart(composite_data: dict[str, Any]) -> str:
+    """Format a midpoint composite chart as LLM-optimized text.
+
+    Args:
+        composite_data: Composite chart data with chart_system, planets, points, houses, aspects
+
+    Returns:
+        Multi-line formatted text block
+    """
+    lines = _chart_system_header(composite_data)
+    lines.extend(["COMPOSITE CHART", ""])
+    lines.extend(
+        _format_chart_sections(
+            composite_data,
+            composite_data.get("aspects", []),
+            aspects_title="COMPOSITE ASPECTS",
+        )
+    )
+    return "\n".join(lines).strip()

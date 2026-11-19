@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import date, datetime
 
-from app.domain.models import BirthData, NatalChart, Synastry, Transit, TransitPeriodResult
+from app.domain.models import BirthData, CompositeChart, NatalChart, Synastry, Transit, TransitPeriodResult
 
 
 class IAstrologyProvider(ABC):
@@ -47,6 +47,23 @@ class IAstrologyProvider(ABC):
 
         Raises:
             ChartCalculationException: If synastry calculation fails
+        """
+        pass
+
+    @abstractmethod
+    def calculate_composite(self, chart1: NatalChart, chart2: NatalChart) -> CompositeChart:
+        """
+        Calculate the midpoint composite chart of two natal charts.
+
+        Args:
+            chart1: First person's natal chart
+            chart2: Second person's natal chart
+
+        Returns:
+            CompositeChart domain model with planets, points, houses, and aspects
+
+        Raises:
+            ChartCalculationException: If composite calculation fails
         """
         pass
 

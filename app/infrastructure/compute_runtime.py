@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.compatibility_service import SynastryService
+from app.application.compatibility_service import RelationshipService
 from app.application.profile_service import ProfileService
 from app.application.transit_period_service import TransitPeriodService
 from app.config.astrology_presets import DetailLevel, get_preset
@@ -23,7 +23,7 @@ from app.config.constants import (
 from app.config.settings import Settings, settings
 from app.core.exceptions import ChartCalculationException, InvalidBirthDataException
 from app.infrastructure.providers.kerykeion_provider import KerykeionProvider
-from app.models.requests import ChartSystemRequest, ProfileRequest, SynastryRequest, TransitPeriodRequest
+from app.models.requests import ChartSystemRequest, ProfileRequest, RelationshipRequest, TransitPeriodRequest
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _get_worker_services(chart_system: ChartSystemRequest) -> dict[str, Any]:
         )
         _WORKER_SERVICES[key] = {
             "profile": ProfileService(provider=provider),
-            "synastry": SynastryService(provider=provider),
+            "relationship": RelationshipService(provider=provider),
             "transit_period": TransitPeriodService(provider=provider),
         }
     return _WORKER_SERVICES[key]
@@ -64,8 +64,16 @@ def _run_compute_task(task_name: str, payload: dict[str, Any], enqueued_at: floa
             request = ProfileRequest.model_validate(payload)
             result = _get_worker_services(request.chart_system)["profile"].generate_placements(request).model_dump(mode="json")
         elif task_name == "synastry_compact":
-            request = SynastryRequest.model_validate(payload)
-            result = _get_worker_services(request.chart_system)["synastry"].analyze_synastry_compact(
+            request = RelationshipRequest.model_validate(payload)
+            result = _get_worker_services(request.chart_system)["relationship"].analyze_synastry_compact(
+                request.person1,
+                request.person2,
+                person1_label=request.person1_label,
+                person2_label=request.person2_label,
+            )
+        elif task_name == "composite_compact":
+            request = RelationshipRequest.model_validate(payload)
+            result = _get_worker_services(request.chart_system)["relationship"].analyze_composite_compact(
                 request.person1,
                 request.person2,
                 person1_label=request.person1_label,

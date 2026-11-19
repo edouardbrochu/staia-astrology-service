@@ -87,6 +87,7 @@ def test_cpu_bound_routes_use_shared_compute_runtime(monkeypatch):
             "lookup_profile_compact": "lookup",
             "placements": PLACEMENTS_RESULT,
             "synastry_compact": "synastry",
+            "composite_compact": "composite",
             "transit_period_compact": "transit",
         }
     )
@@ -99,6 +100,7 @@ def test_cpu_bound_routes_use_shared_compute_runtime(monkeypatch):
         ("/api/v1/astrology/profile/lookup", PROFILE_PAYLOAD, "lookup_profile_compact"),
         ("/api/v1/astrology/profile/placements", PROFILE_PAYLOAD, "placements"),
         ("/api/v1/astrology/synastry", SYNASTRY_PAYLOAD, "synastry_compact"),
+        ("/api/v1/astrology/composite", SYNASTRY_PAYLOAD, "composite_compact"),
         ("/api/v1/astrology/transits/period", TRANSIT_PERIOD_PAYLOAD, "transit_period_compact"),
     ]
 
@@ -139,3 +141,17 @@ def test_compute_task_uses_requested_chart_system():
     lines = outcome["result"].splitlines()
     assert lines[0] == "CHART_SYSTEM: vedic_sidereal_lahiri_whole_sign"
     assert "Sun in Gem 0° (H10, Mrigashira 3)" in lines
+
+
+def test_composite_task_uses_requested_chart_system():
+    payload = {
+        **SYNASTRY_PAYLOAD,
+        "chart_system": {"zodiac": "vedic", "house_system": "whole_sign"},
+    }
+
+    outcome = _run_compute_task("composite_compact", payload, enqueued_at=0)
+
+    assert outcome["ok"], outcome
+    lines = outcome["result"].splitlines()
+    assert lines[0] == "CHART_SYSTEM: vedic_sidereal_lahiri_whole_sign"
+    assert "COMPOSITE CHART" in lines

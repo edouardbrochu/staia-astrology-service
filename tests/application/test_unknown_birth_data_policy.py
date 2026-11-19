@@ -1,9 +1,17 @@
 from datetime import date
 
-from app.application.compatibility_service import SynastryService
+from app.application.compatibility_service import RelationshipService
 from app.application.profile_service import ProfileService
 from app.application.transit_period_service import TransitPeriodService
-from app.domain.models import BirthData, NatalChart, RelationshipScore, Synastry, Transit, TransitPeriodResult
+from app.domain.models import (
+    BirthData,
+    CompositeChart,
+    NatalChart,
+    RelationshipScore,
+    Synastry,
+    Transit,
+    TransitPeriodResult,
+)
 
 
 class FakeProvider:
@@ -44,6 +52,18 @@ class FakeProvider:
                 {"p1_name": "Sun", "p2_name": "Moon", "aspect": "trine", "orbit": 2.0},
             ],
             relationship_score=RelationshipScore(score_value=10, is_destiny_sign=False),
+        )
+
+    def calculate_composite(self, chart1: NatalChart, chart2: NatalChart) -> CompositeChart:
+        return CompositeChart(
+            chart_system=chart1.chart_system,
+            planets={
+                "sun": chart1.planets["sun"],
+                "moon": chart2.planets["moon"],
+            },
+            houses=chart1.houses,
+            points=chart1.points,
+            aspects=chart1.aspects,
         )
 
     def calculate_transit_periods(self, natal_chart: NatalChart, start_date: date, end_date: date):
@@ -111,7 +131,7 @@ def test_safe_unknown_birth_data_unknown_location_preserves_midnight_birth_time(
 
 
 def test_safe_unknown_birth_data_adds_synastry_caution_without_filtering_content():
-    service = SynastryService(provider=FakeProvider())
+    service = RelationshipService(provider=FakeProvider())
 
     text = service.analyze_synastry_compact(
         BirthData(year=1990, month=1, day=1, birth_time_known=False),
@@ -144,4 +164,26 @@ def test_safe_unknown_birth_data_adds_transit_caution_without_filtering_content(
         "NOTE: birth time for the user is unknown; exact transit timing may be less precise.",
         "",
         "TRANSITS 2026-01-01 to 2026-01-07",
+    ]
+
+
+def test_safe_unknown_birth_data_filters_composite_to_stable_signs_and_note():
+    service = RelationshipService(provider=FakeProvider())
+
+    text = service.analyze_composite_compact(
+        BirthData(year=1990, month=1, day=1, hour=9, minute=0, timezone="Europe/London"),
+        BirthData(year=1991, month=1, day=1, birth_time_known=False, timezone="Europe/London"),
+        person1_label="the user",
+        person2_label="Maya",
+    )
+
+    assert text.splitlines() == [
+        "CHART_SYSTEM: western_tropical_placidus",
+        "NOTE: birth time for Maya is unknown; ascendant, houses, house placements, points, "
+        "exact degrees, and aspects were omitted.",
+        "",
+        "COMPOSITE CHART",
+        "",
+        "PLANETS",
+        "Sun in Aries",
     ]
