@@ -47,6 +47,7 @@ TRANSIT_ASPECTS = [
 # Filtering thresholds
 MAX_EXACT_ORB = 3.0  # Only include aspects that get within 3° of exact
 MAX_DURATION_RATIO = 0.8  # Skip aspects active >80% of the period (background noise)
+BACKGROUND_MIN_PERIOD_DAYS = 30  # Only periods this long have background to skip: in a day or a week, a transit active the whole time is the main event
 TARGET_CHAR_LIMIT = 3000  # Target output size
 CHARS_PER_ASPECT = 50  # Average chars per aspect line
 MAX_ASPECTS = TARGET_CHAR_LIMIT // CHARS_PER_ASPECT  # ~60 aspects
@@ -369,7 +370,7 @@ class KerykeionProvider(IAstrologyProvider):
             result = transits_factory.get_transit_moments()
 
             # Post-process to extract periods with exact dates
-            aspects = self._extract_transit_periods(result.transits, start_date, end_date)
+            aspects = self._extract_transit_periods(result.transits, start_date, end_date, step_days)
 
             return TransitPeriodResult(
                 start_date=start_date,
@@ -384,12 +385,15 @@ class KerykeionProvider(IAstrologyProvider):
         self,
         transits: list,
         start_date: date,
-        end_date: date
+        end_date: date,
+        step_days: int = 1,
     ) -> list[TransitAspect]:
         """
         Extract transit periods from raw Kerykeion transit data.
 
         Groups daily aspect data into continuous periods and finds exact dates.
+        A transit that comes back later (the Sun squares a planet in May and again
+        in November) is a separate period each time.
         Applies relevance scoring to limit output to ~3K chars regardless of period length.
         """
         total_days = (end_date - start_date).days + 1
@@ -416,16 +420,22 @@ class KerykeionProvider(IAstrologyProvider):
         # Convert timeline to TransitAspect objects with scoring
         scored_aspects: list[tuple[float, TransitAspect]] = []
 
+        passes: list[tuple[str, list[tuple[date, float]]]] = []
         for key, timeline in aspect_timeline.items():
-            if len(timeline) < 1:
-                continue
+            timeline.sort(key=lambda x: x[0])
+            run = [timeline[0]]
+            for entry in timeline[1:]:
+                if (entry[0] - run[-1][0]).days > step_days:
+                    passes.append((key, run))
+                    run = []
+                run.append(entry)
+            passes.append((key, run))
 
+        for key, timeline in passes:
             parts = key.split('|')
             transit_planet = parts[0]
             aspect_type = parts[1]
             natal_planet = parts[2]
-
-            timeline.sort(key=lambda x: x[0])
 
             # Find exact date (minimum orb)
             min_orb_entry = min(timeline, key=lambda x: x[1])
@@ -440,9 +450,8 @@ class KerykeionProvider(IAstrologyProvider):
             period_end = timeline[-1][0]
             duration_days = (period_end - period_start).days + 1
 
-            # Filter: skip if active for too much of the period (background noise)
-            duration_ratio = duration_days / total_days
-            if duration_ratio > MAX_DURATION_RATIO:
+            # Filter: skip if active for too much of a long period (background noise)
+            if total_days >= BACKGROUND_MIN_PERIOD_DAYS and duration_days / total_days > MAX_DURATION_RATIO:
                 continue
 
             # Calculate relevance score
