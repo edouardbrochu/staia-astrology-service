@@ -33,6 +33,7 @@ from app.infrastructure.compute_runtime import create_compute_runtime
 
 logger = logging.getLogger(__name__)
 SERVICE_ROLE = "astrology-service"
+_PRIVATE_KEY_TERMS = ["forwarded", "-ip", "remote-", "via", "-user"]
 
 
 def init_astrology_sentry(
@@ -47,15 +48,25 @@ def init_astrology_sentry(
         environment=environment,
         release=release,
         traces_sample_rate=0.2,
-        send_default_pii=False,
+        # Keep messages grouped by text, as before SDK 3 turned this on.
+        attach_stacktrace=False,
+        # Keeps what send_default_pii=False collected before SDK 3: no
+        # request bodies (birth data), no user details, and no client IPs.
+        # Frame variables keep the SDK's sensitive-key filtering.
+        data_collection={
+            "user_info": False,
+            "http_bodies": [],
+            "http_headers": {"request": {"mode": "denylist", "terms": _PRIVATE_KEY_TERMS}},
+            "cookies": {"mode": "denylist", "terms": _PRIVATE_KEY_TERMS},
+            "url_query_params": {"mode": "denylist", "terms": _PRIVATE_KEY_TERMS},
+            "stack_frame_variables": {"mode": "denylist"},
+        },
         integrations=[
-            FastApiIntegration(
-                transaction_style="endpoint",
-                failed_request_status_codes={*range(500, 599)},
-            ),
+            FastApiIntegration(failed_request_status_codes={*range(500, 599)}),
             LoggingIntegration(
-                level=logging.INFO,
+                breadcrumb_level=logging.INFO,
                 event_level=None,
+                level=None,
             ),
         ],
     )
